@@ -28,7 +28,7 @@ const hasInlineStyle = async (file_path) => {
 
 const getFilesHelper = (files, full_path) => {
     return files.map(async file => {
-        const file_path = path.join(full_path,file);
+        const file_path = path.join(full_path, file);
         const stats = await fs.promises.stat(file_path)
         const all_matches = await hasInlineStyle(file_path)
         if(stats.isFile() && all_matches.length)
@@ -36,33 +36,42 @@ const getFilesHelper = (files, full_path) => {
     })
 }
 
+// FIXME:  It should be done recursively
 export const getFiles = async () => {
-    let all_files   = []
-    let files       = []
+    let all_files           = []
+    let components          = []
+    let files               = []
+    let total_occurrences   = 0
+    let full_path           = ""
     
 
     for (const content_folder of Const.CONTENT_FOLDERS) {
         let output      = []
-        const full_path = path.join(Const.PATH,content_folder)
+        full_path = path.join(Const.PATH, content_folder)
+
         try {
-            files = await fs.promises.readdir(full_path);
+            components = await fs.promises.readdir(full_path);
+
             console.group(`Scanning files in <${content_folder}>`)
-            files = (await Promise.all(getFilesHelper(files, full_path))).filter(file => file)
-            console.log(`Found #${files.length}`)
-            files.map(file => {
-                all_files.push(file.file)
-                output = [...output, ...file.matches.map(match => ({"Content Folder":content_folder,"File":file.file, "Match":match, "Status": "Open"}))]
-            })
+            for(const component of components) {
+                const component_path = path.join(full_path, component)
+                const stats = await fs.promises.stat(component_path)
+                if( stats.isDirectory() ) {
+                    files = await fs.promises.readdir(component_path)
+                    files = (await Promise.all(getFilesHelper(files, component_path))).filter(file => file)
+                    files.map(file => {
+                        all_files.push(file.file)
+                        total_occurrences += file.matches.length
+                        output = [...output, ...file.matches.map(match => ({"Content Folder":content_folder,"File":file.file, "Match":match}))]
+                    })
+                }
+            }
+            if( output.length)
+                console.table( output )
             console.groupEnd(`Scanning all_matches in <${content_folder}>`)
         } catch (error) {
             console.dir(error)
         }
-        if( output.length)
-            console.table( output )
     }
-    return all_files
+    return [all_files, total_occurrences]
 }
-
-
-
-// console.log("Hi", Const)
